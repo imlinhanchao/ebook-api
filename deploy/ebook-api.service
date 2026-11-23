@@ -1,0 +1,16 @@
+[Unit]
+Description=Ebook API — 独立多书源查书与下载服务
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+ExecStart=__APP_DIR__/bin/ebook-api
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:__APP_DIR__/.tmp/ebook-api.log
+StandardError=append:__APP_DIR__/.tmp/ebook-api.log
+
+[Install]
+WantedBy=default.target

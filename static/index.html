@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ebook API · 书源测试台</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📚</span>
+      <div>
+        <h1>Ebook API 测试台</h1>
+        <p class="subtitle">多书源查书 · 详情 · 流式下载 · 加密令牌调试</p>
+      </div>
+    </div>
+    <div class="status-group">
+      <span id="healthBadge" class="badge badge-muted">检测中...</span>
+      <button id="btnRefresh" class="btn btn-ghost btn-sm" type="button">刷新书源</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- 左侧配置栏 -->
+    <aside class="sidebar">
+      <section class="card">
+        <h2>1. 服务与书源配置</h2>
+        <div class="field">
+          <label for="apiKeyInput">API Key（可选，如服务端未设置可留空）</label>
+          <input id="apiKeyInput" type="password" placeholder="EBOOK_API_KEY" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="providerSelect">当前书源</label>
+          <select id="providerSelect"></select>
+        </div>
+
+        <div id="providerMeta" class="meta-box"></div>
+
+        <div class="field">
+          <label for="domainSelect">镜像域名</label>
+          <div class="row">
+            <select id="domainSelect"></select>
+            <button id="btnProbe" class="btn btn-secondary btn-sm" type="button">探测</button>
+          </div>
+          <div id="probeResult" class="hint"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>2. 加密令牌 (credential_token)</h2>
+          <span id="tokenBadge" class="badge badge-muted">未配置</span>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="login" type="button">账密登录</button>
+          <button class="tab" data-tab="seal" type="button">凭据封包</button>
+          <button class="tab" data-tab="manual" type="button">手动令牌</button>
+        </div>
+
+        <!-- Tab: Login -->
+        <form id="loginForm" class="tab-panel active">
+          <div class="field">
+            <label for="loginEmail">邮箱</label>
+            <input id="loginEmail" type="email" placeholder="you@example.com" required />
+          </div>
+          <div class="field">
+            <label for="loginPassword">密码</label>
+            <input id="loginPassword" type="password" placeholder="••••••••" required />
+          </div>
+          <button class="btn btn-primary full" type="submit">登录并生成加密令牌</button>
+        </form>
+
+        <!-- Tab: Seal -->
+        <form id="sealForm" class="tab-panel">
+          <div id="sealDynamicFields"></div>
+          <label class="checkbox-row">
+            <input id="sealVerify" type="checkbox" checked />
+            <span>封包前先向书源校验有效性</span>
+          </label>
+          <button class="btn btn-primary full" type="submit">封包为加密令牌</button>
+        </form>
+
+        <!-- Tab: Manual token -->
+        <div id="manualPanel" class="tab-panel">
+          <div class="field">
+            <label for="manualToken">已有的 ebk1.* 加密令牌</label>
+            <textarea id="manualToken" rows="3" placeholder="ebk1.xxxxx..."></textarea>
+          </div>
+          <button id="btnSaveManualToken" class="btn btn-primary full" type="button">保存到本地</button>
+        </div>
+
+        <div class="token-actions">
+          <button id="btnVerify" class="btn btn-secondary btn-sm" type="button">校验配额</button>
+          <button id="btnCopyToken" class="btn btn-ghost btn-sm" type="button">复制令牌</button>
+          <button id="btnClearToken" class="btn btn-danger btn-sm" type="button">清除</button>
+        </div>
+
+        <div id="accountBox" class="account-box hidden"></div>
+      </section>
+    </aside>
+
+    <!-- 右侧查书与结果区 -->
+    <section class="content">
+      <div class="card">
+        <h2>3. 查书搜索</h2>
+        <form id="searchForm" class="search-form">
+          <div class="search-bar">
+            <input id="searchQ" type="text" placeholder="输入书名、作者或 ISBN，例如：三体 / 鲁迅" required />
+            <button class="btn btn-primary" type="submit">搜索</button>
+          </div>
+          <div class="filters">
+            <label>
+              <span>范围</span>
+              <select id="searchScope">
+                <option value="current">当前书源</option>
+                <option value="all">全部书源聚合</option>
+              </select>
+            </label>
+            <label>
+              <span>格式</span>
+              <input id="searchExt" type="text" placeholder="epub,pdf" />
+            </label>
+            <label>
+              <span>语言</span>
+              <input id="searchLang" type="text" placeholder="chinese,english" />
+            </label>
+            <label>
+              <span>起始年</span>
+              <input id="searchYearFrom" type="number" placeholder="如 2000" />
+            </label>
+            <label>
+              <span>结束年</span>
+              <input id="searchYearTo" type="number" placeholder="如 2026" />
+            </label>
+            <label>
+              <span>每页</span>
+              <input id="searchLimit" type="number" value="20" min="1" max="100" />
+            </label>
+          </div>
+        </form>
+      </div>
+
+      <div id="toast" class="toast hidden"></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 id="resultHeading">搜索结果</h2>
+          <div class="pager hidden" id="pager">
+            <button id="btnPrevPage" class="btn btn-ghost btn-sm" type="button">上一页</button>
+            <span id="pageInfo">1 / 1</span>
+            <button id="btnNextPage" class="btn btn-ghost btn-sm" type="button">下一页</button>
+          </div>
+        </div>
+        <div id="resultsContainer" class="results-empty">输入关键词开始搜索电子书。</div>
+      </div>
+
+      <details class="card debug-card">
+        <summary>最近一次 API 响应（调试）</summary>
+        <pre id="debugOutput">暂无请求记录</pre>
+      </details>
+    </section>
+  </main>
+
+  <!-- 图书详情弹窗 -->
+  <dialog id="detailDialog" class="dialog">
+    <div class="dialog-head">
+      <h3 id="detailTitle">图书详情</h3>
+      <button id="btnCloseDialog" class="btn btn-ghost btn-sm" type="button">关闭</button>
+    </div>
+    <div id="detailBody" class="dialog-body"></div>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
