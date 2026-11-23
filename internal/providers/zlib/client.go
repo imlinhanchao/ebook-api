@@ -28,6 +28,9 @@ const (
 	httpUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
 		"(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 
+	// EAPI search now rejects requests lacking the client source header.
+	eapiSource = "android"
+
 	defaultDomain = "https://z-lib.gd"
 
 	eapiLoginPath       = "/eapi/user/login"
@@ -110,6 +113,7 @@ func (c *client) doWith(ctx context.Context, method, apiPath string, values url.
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req.Header.Set("User-Agent", httpUserAgent)
+	req.Header.Set("source", eapiSource)
 	if method != http.MethodGet && method != http.MethodHead {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
@@ -173,6 +177,10 @@ func (c *client) doWith(ctx context.Context, method, apiPath string, values url.
 
 	if status >= http.StatusInternalServerError {
 		return nil, fmt.Errorf("%w: HTTP %d at %s", providers.ErrProviderUnavailable, status, c.domain)
+	}
+	if envelope != nil && envelope.hasSuccess() && envelope.successValue() != 1 &&
+		(c.userID == "" || c.userKey == "") && strings.EqualFold(envelope.errorMessage(), "access denied") {
+		return nil, fmt.Errorf("%w: %s", providers.ErrNotConfigured, envelope.errorMessage())
 	}
 	if envelope != nil && envelope.hasSuccess() && envelope.successValue() != 1 {
 		return nil, classifyEAPIError(envelope.errorMessage())
@@ -425,6 +433,7 @@ func probeDomain(ctx context.Context, domain string, hc *http.Client) bool {
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", httpUserAgent)
+	req.Header.Set("source", eapiSource)
 	resp, err := hc.Do(req)
 	if err != nil {
 		return false

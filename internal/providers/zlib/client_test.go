@@ -47,6 +47,7 @@ type capturedRequest struct {
 	accept      string
 	contentType string
 	userAgent   string
+	source      string
 	userID      string
 	userKey     string
 	cookies     map[string]string
@@ -67,6 +68,7 @@ func TestClientDoSendsProtocol(t *testing.T) {
 			accept:      r.Header.Get("Accept"),
 			contentType: r.Header.Get("Content-Type"),
 			userAgent:   r.Header.Get("User-Agent"),
+			source:      r.Header.Get("source"),
 			userID:      r.Header.Get("remix-userid"),
 			userKey:     r.Header.Get("remix-userkey"),
 			cookies:     cookies,
@@ -104,6 +106,9 @@ func TestClientDoSendsProtocol(t *testing.T) {
 	}
 	if !strings.Contains(got.userAgent, "Chrome/") {
 		t.Errorf("User-Agent = %q", got.userAgent)
+	}
+	if got.source != eapiSource {
+		t.Errorf("source = %q, want %q", got.source, eapiSource)
 	}
 	if got.userID != "42" || got.userKey != "FAKE-KEY" {
 		t.Errorf("remix headers = %q/%q", got.userID, got.userKey)
@@ -271,6 +276,21 @@ func TestClientErrorClassification(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClientUnauthAccessDeniedClassifiedAsNotConfigured(t *testing.T) {
+	server := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"success":0,"error":"Access denied"}`)
+	})
+
+	c := newClient(server.URL, "", "", nil)
+	_, err := c.do(context.Background(), http.MethodPost, eapiSearchPath, url.Values{"message": {"test"}})
+	if err == nil {
+		t.Fatal("request succeeded, want error")
+	}
+	requireErrorIs(t, err, providers.ErrNotConfigured)
 }
 
 func TestClientProbeDomain(t *testing.T) {
