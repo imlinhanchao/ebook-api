@@ -62,7 +62,11 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/providers/{id}/books/{ref}", s.requireAuth(s.handleBookDetailPOST))
 
 	// Book download (streaming)
-	m.HandleFunc("GET /v1/providers/{id}/books/{ref}/download", s.requireAuth(s.handleDownloadGET))
+	if s.cfg.PublicDownload {
+		m.HandleFunc("GET /v1/providers/{id}/books/{ref}/download", s.handleDownloadGET)
+	} else {
+		m.HandleFunc("GET /v1/providers/{id}/books/{ref}/download", s.requireAuth(s.handleDownloadGET))
+	}
 	m.HandleFunc("POST /v1/providers/{id}/books/{ref}/download", s.requireAuth(s.handleDownloadPOST))
 
 	// Frontend test UI (static/)

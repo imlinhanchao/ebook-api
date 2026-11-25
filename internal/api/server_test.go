@@ -340,3 +340,68 @@ func TestLoginVerifyProbeWithToken(t *testing.T) {
 		t.Fatalf("probe failed: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestDownloadCDNCacheHeadersAndPublicDownload(t *testing.T) {
+	openCalls := 0
+	reg := providers.NewRegistry()
+	reg.Register(&fakeProvider{
+		id:   "zlib",
+		name: "Z-Library",
+		openDownFn: func(ctx context.Context, creds providers.Credentials, ref string) (*providers.DownloadStream, error) {
+			openCalls++
+			content := []byte("cdn-book-bytes")
+			return &providers.DownloadStream{
+				Body:        io.NopCloser(bytes.NewReader(content)),
+				Filename:    "book.epub",
+				Format:      "epub",
+				ContentType: "application/epub+zip",
+				Size:        int64(len(content)),
+			}, nil
+		},
+	})
+
+	srv := New(&config.Config{
+		APIKey:         "secret-key",
+		Secret:         testKey(t),
+		PublicDownload: true,
+	}, reg)
+
+	// /v1/providers still requires API key
+	req := httptest.NewRequest(http.MethodGet, "/v1/providers", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 on /v1/providers without key, got %d", rec.Code)
+	}
+
+	// GET download works without API key when PublicDownload=true
+	req = httptest.NewRequest(http.MethodGet, "/v1/providers/zlib/books/99:hash99/download", nil)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on public download, got %d", rec.Code)
+	}
+	cc := rec.Header().Get("Cache-Control")
+	etag := rec.Header().Get("ETag")
+	if !strings.Contains(cc, "public") || !strings.Contains(cc, "immutable") {
+		t.Fatalf("unexpected Cache-Control: %q", cc)
+	}
+	if etag == "" {
+		t.Fatalf("expected non-empty ETag")
+	}
+	if openCalls != 1 {
+		t.Fatalf("expected 1 OpenDownload call, got %d", openCalls)
+	}
+
+	// Conditional GET with matching ETag returns 304 without calling provider
+	req = httptest.NewRequest(http.MethodGet, "/v1/providers/zlib/books/99:hash99/download", nil)
+	req.Header.Set("If-None-Match", etag)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotModified {
+		t.Fatalf("expected 304 Not Modified, got %d", rec.Code)
+	}
+	if openCalls != 1 {
+		t.Fatalf("expected OpenDownload not to be called on 304, got %d", openCalls)
+	}
+}

@@ -18,6 +18,8 @@ type Config struct {
 	APIKey                string
 	Secret                []byte
 	AllowPlainCredHeaders bool
+	PublicDownload        bool
+	DownloadCacheControl  string
 	DefaultProvider       string
 	EnabledProviders      []string
 	MaxDownloadBytes      int64
@@ -55,6 +57,8 @@ func LoadFromEnv() *Config {
 		StaticDir:             env("EBOOK_STATIC_DIR", "static"),
 		APIKey:                strings.TrimSpace(os.Getenv("EBOOK_API_KEY")),
 		AllowPlainCredHeaders: envBool("EBOOK_ALLOW_PLAIN_CRED_HEADERS", false),
+		PublicDownload:        envBool("EBOOK_PUBLIC_DOWNLOAD", false),
+		DownloadCacheControl:  env("EBOOK_DOWNLOAD_CACHE_CONTROL", "public, max-age=2592000, immutable"),
 		DefaultProvider:       strings.ToLower(strings.TrimSpace(env("EBOOK_DEFAULT_PROVIDER", "zlib"))),
 		EnabledProviders:      splitCSVLower(os.Getenv("EBOOK_ENABLED_PROVIDERS")),
 		MaxDownloadBytes:      maxBytes,

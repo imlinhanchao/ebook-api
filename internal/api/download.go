@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +13,8 @@ import (
 
 	"github.com/imlinhanchao/ebook-api/internal/providers"
 )
+
+const defaultDownloadCacheControl = "public, max-age=2592000, immutable"
 
 func (s *Server) handleDownloadGET(w http.ResponseWriter, r *http.Request) {
 	s.executeDownload(w, r, "", nil)
@@ -39,6 +43,19 @@ func (s *Server) executeDownload(w http.ResponseWriter, r *http.Request, bodyTok
 		writeError(w, http.StatusBadRequest, "INVALID_REF", "缺少图书引用 ref")
 		return
 	}
+
+	etag := bookETag(id, ref)
+	cacheControl := strings.TrimSpace(s.cfg.DownloadCacheControl)
+	if cacheControl == "" {
+		cacheControl = defaultDownloadCacheControl
+	}
+	if r.Method == http.MethodGet && etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Cache-Control", cacheControl)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	creds, err := s.resolveCredentials(r, id, bodyToken, bodyCreds)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "INVALID_CREDENTIALS", err.Error())
@@ -57,6 +74,8 @@ func (s *Server) executeDownload(w http.ResponseWriter, r *http.Request, bodyTok
 		contentType = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", cacheControl)
+	w.Header().Set("ETag", etag)
 	if stream.Filename != "" {
 		w.Header().Set("Content-Disposition", formatContentDisposition(stream.Filename))
 		w.Header().Set("X-Book-Filename", url.PathEscape(stream.Filename))
@@ -73,6 +92,25 @@ func (s *Server) executeDownload(w http.ResponseWriter, r *http.Request, bodyTok
 		// Headers and status 200 are already sent; just log the interrupted transfer.
 		log.Printf("download stream interrupted for %s/%s: %v", id, ref, err)
 	}
+}
+
+func bookETag(providerID, ref string) string {
+	sum := sha256.Sum256([]byte(strings.ToLower(providerID) + ":" + ref))
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
+}
+
+func etagMatches(headerValue, etag string) bool {
+	if strings.TrimSpace(headerValue) == "" {
+		return false
+	}
+	for _, part := range strings.Split(headerValue, ",") {
+		candidate := strings.TrimSpace(part)
+		candidate = strings.TrimPrefix(candidate, "W/")
+		if candidate == "*" || candidate == etag {
+			return true
+		}
+	}
+	return false
 }
 
 func formatContentDisposition(filename string) string {
