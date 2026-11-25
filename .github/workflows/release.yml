@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号（如 v0.1.0）"
+        required: true
+        type: string
+      prerelease:
+        description: "标记为预发布版本 (Pre-release)"
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: "保存为草稿 (Draft)"
+        required: false
+        default: false
+        type: boolean
+      notes:
+        description: "自定义发布说明（留空则由 GitHub 自动生成）"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Normalize & validate version
+        id: ver
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+        run: |
+          v="${RAW_VERSION#v}"
+          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::无效版本号 '${RAW_VERSION}'，请使用语义化版本，例如 v0.1.0 或 0.1.0"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=v$v" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet & Test
+        run: |
+          go vet ./...
+          go test -race ./...
+
+      - name: Build & Package Multi-Platform Archives
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          TARGETS=(
+            "linux amd64"
+            "linux arm64"
+            "darwin amd64"
+            "darwin arm64"
+            "windows amd64"
+          )
+
+          LDFLAGS="-s -w -X github.com/imlinhanchao/ebook-api/internal/api.Version=${VERSION}"
+
+          for target in "${TARGETS[@]}"; do
+            read -r GOOS GOARCH <<< "$target"
+            EXT=""
+            if [ "$GOOS" = "windows" ]; then
+              EXT=".exe"
+            fi
+
+            STAGE="dist/ebook-api_${TAG}_${GOOS}_${GOARCH}"
+            mkdir -p "$STAGE"
+
+            echo "Building ${GOOS}/${GOARCH}..."
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
+              go build -buildvcs=false -trimpath -ldflags="$LDFLAGS" \
+              -o "${STAGE}/ebook-api${EXT}" ./cmd/ebook-api
+
+            cp -r static "$STAGE/static"
+            cp .env.example README.md "$STAGE/"
+            if [ "$GOOS" = "linux" ] && [ -d deploy ]; then
+              cp -r deploy "$STAGE/deploy"
+            fi
+
+            if [ "$GOOS" = "windows" ]; then
+              (cd dist && zip -rq "ebook-api_${TAG}_${GOOS}_${GOARCH}.zip" "ebook-api_${TAG}_${GOOS}_${GOARCH}")
+            else
+              tar -C dist -czf "dist/ebook-api_${TAG}_${GOOS}_${GOARCH}.tar.gz" "ebook-api_${TAG}_${GOOS}_${GOARCH}"
+            fi
+
+            rm -rf "$STAGE"
+          done
+
+          (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+          ls -lh dist/
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          NOTES: ${{ inputs.notes }}
+          IS_DRAFT: ${{ inputs.draft }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          ARGS=(
+            "$TAG"
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            --title "ebook-api ${TAG}"
+            --target "${GITHUB_SHA}"
+          )
+
+          if [ "$IS_DRAFT" = "true" ]; then
+            ARGS+=(--draft)
+          fi
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            ARGS+=(--prerelease)
+          fi
+          if [ -n "$NOTES" ]; then
+            ARGS+=(--notes "$NOTES")
+          else
+            ARGS+=(--generate-notes)
+          fi
+
+          gh release create "${ARGS[@]}"

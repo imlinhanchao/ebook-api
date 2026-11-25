@@ -14,7 +14,8 @@ import (
 	"github.com/imlinhanchao/ebook-api/internal/secret"
 )
 
-const Version = "0.1.0"
+// Version is the application version; overridden at build time via -ldflags.
+var Version = "0.1.0"
 
 // Server serves the ebook-api HTTP endpoints.
 type Server struct {
