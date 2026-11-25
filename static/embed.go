@@ -4,5 +4,5 @@ package static
 
 import "embed"
 
-//go:embed index.html styles.css app.js
+//go:embed index.html styles.css app.js logo.svg
 var FS embed.FS
