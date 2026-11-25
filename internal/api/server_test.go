@@ -405,3 +405,36 @@ func TestDownloadCDNCacheHeadersAndPublicDownload(t *testing.T) {
 		t.Fatalf("expected OpenDownload not to be called on 304, got %d", openCalls)
 	}
 }
+
+func TestStaticEmbeddedFallback(t *testing.T) {
+	reg := providers.NewRegistry()
+	srv := New(&config.Config{
+		Secret:    testKey(t),
+		StaticDir: "/nonexistent/static/dir",
+	}, reg)
+
+	// Root path should fall back to embedded index.html
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Ebook API") {
+		t.Fatalf("GET / fallback failed: %d", rec.Code)
+	}
+
+	// /static/app.js should also be served from embedded FS
+	req = httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "STORAGE_KEY") {
+		t.Fatalf("GET /static/app.js fallback failed: %d", rec.Code)
+	}
+
+	// StaticDir="off" disables the UI
+	disabled := New(&config.Config{Secret: testKey(t), StaticDir: "off"}, reg)
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	rec = httptest.NewRecorder()
+	disabled.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when StaticDir=off, got %d", rec.Code)
+	}
+}

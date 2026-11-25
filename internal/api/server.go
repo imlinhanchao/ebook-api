@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/imlinhanchao/ebook-api/internal/config"
 	"github.com/imlinhanchao/ebook-api/internal/providers"
 	"github.com/imlinhanchao/ebook-api/internal/secret"
+	"github.com/imlinhanchao/ebook-api/static"
 )
 
 // Version is the application version; overridden at build time via -ldflags.
@@ -69,14 +73,41 @@ func (s *Server) routes() {
 	}
 	m.HandleFunc("POST /v1/providers/{id}/books/{ref}/download", s.requireAuth(s.handleDownloadPOST))
 
-	// Frontend test UI (static/)
-	if staticDir := strings.TrimSpace(s.cfg.StaticDir); staticDir != "" {
-		fs := http.FileServer(http.Dir(staticDir))
-		m.Handle("GET /static/", http.StripPrefix("/static/", fs))
+	// Frontend test UI: prefer disk staticDir (CWD or next to binary), fall back
+	// to embedded assets so the root page never 404s regardless of CWD.
+	if staticFS := resolveStaticFS(s.cfg.StaticDir); staticFS != nil {
+		fileServer := http.FileServerFS(staticFS)
+		m.Handle("GET /static/", http.StripPrefix("/static/", fileServer))
 		m.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, staticDir+"/index.html")
+			http.ServeFileFS(w, r, staticFS, "index.html")
 		})
 	}
+}
+
+func resolveStaticFS(configured string) fs.FS {
+	dir := strings.TrimSpace(configured)
+	if strings.EqualFold(dir, "none") || strings.EqualFold(dir, "off") {
+		return nil
+	}
+	if dir != "" {
+		if hasIndexHTML(dir) {
+			return os.DirFS(dir)
+		}
+		if !filepath.IsAbs(dir) {
+			if exe, err := os.Executable(); err == nil {
+				candidate := filepath.Join(filepath.Dir(exe), dir)
+				if hasIndexHTML(candidate) {
+					return os.DirFS(candidate)
+				}
+			}
+		}
+	}
+	return static.FS
+}
+
+func hasIndexHTML(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, "index.html"))
+	return err == nil && !info.IsDir()
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
