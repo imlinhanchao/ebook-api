@@ -413,28 +413,55 @@ func TestStaticEmbeddedFallback(t *testing.T) {
 		StaticDir: "/nonexistent/static/dir",
 	}, reg)
 
-	// Root path should fall back to embedded index.html
+	// Root path should fall back to embedded deployment homepage (without /console links)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Ebook API") {
+	rootBody := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(rootBody, "Ebook API") {
 		t.Fatalf("GET / fallback failed: %d", rec.Code)
 	}
-
-	// /static/app.js should also be served from embedded FS
-	req = httptest.NewRequest(http.MethodGet, "/static/app.js", nil)
-	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "STORAGE_KEY") {
-		t.Fatalf("GET /static/app.js fallback failed: %d", rec.Code)
+	if strings.Contains(rootBody, "/console") || strings.Contains(rootBody, "console.html") {
+		t.Fatalf("GET / homepage must not link or reference /console")
 	}
 
-	// StaticDir="off" disables the UI
+	// /console and /console/ should serve the standalone tester UI
+	for _, consolePath := range []string{"/console", "/console/"} {
+		req = httptest.NewRequest(http.MethodGet, consolePath, nil)
+		rec = httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		consoleBody := rec.Body.String()
+		if rec.Code != http.StatusOK || !strings.Contains(consoleBody, "Ebook API 测试台") || !strings.Contains(consoleBody, "/static/app.js") {
+			t.Fatalf("GET %s fallback failed: %d", consolePath, rec.Code)
+		}
+	}
+
+	// Embedded static assets should all be served
+	for _, asset := range []struct {
+		path    string
+		snippet string
+	}{
+		{"/static/home.css", "--bg-canvas"},
+		{"/static/home.js", "buildEnvConfig"},
+		{"/static/app.js", "STORAGE_KEY"},
+		{"/static/zlibrary-book-source.json", `"id": "zlib"`},
+	} {
+		req = httptest.NewRequest(http.MethodGet, asset.path, nil)
+		rec = httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), asset.snippet) {
+			t.Fatalf("GET %s fallback failed: %d", asset.path, rec.Code)
+		}
+	}
+
+	// StaticDir="off" disables both homepage and console UI
 	disabled := New(&config.Config{Secret: testKey(t), StaticDir: "off"}, reg)
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	rec = httptest.NewRecorder()
-	disabled.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("expected 404 when StaticDir=off, got %d", rec.Code)
+	for _, path := range []string{"/", "/console"} {
+		req = httptest.NewRequest(http.MethodGet, path, nil)
+		rec = httptest.NewRecorder()
+		disabled.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for %s when StaticDir=off, got %d", path, rec.Code)
+		}
 	}
 }

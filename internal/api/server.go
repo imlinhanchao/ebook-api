@@ -73,14 +73,20 @@ func (s *Server) routes() {
 	}
 	m.HandleFunc("POST /v1/providers/{id}/books/{ref}/download", s.requireAuth(s.handleDownloadPOST))
 
-	// Frontend test UI: prefer disk staticDir (CWD or next to binary), fall back
-	// to embedded assets so the root page never 404s regardless of CWD.
+	// Frontend homepage (/) and standalone test console (/console): prefer disk
+	// staticDir (CWD or next to binary), fall back to embedded assets so root
+	// and console pages never 404 regardless of CWD.
 	if staticFS := resolveStaticFS(s.cfg.StaticDir); staticFS != nil {
 		fileServer := http.FileServerFS(staticFS)
+		serveConsole := func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFileFS(w, r, staticFS, "console.html")
+		}
 		m.Handle("GET /static/", http.StripPrefix("/static/", fileServer))
 		m.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 			http.ServeFileFS(w, r, staticFS, "index.html")
 		})
+		m.HandleFunc("GET /console", serveConsole)
+		m.HandleFunc("GET /console/{$}", serveConsole)
 	}
 }
 
