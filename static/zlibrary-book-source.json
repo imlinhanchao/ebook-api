@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "config_version": "2026.11.27.1",
+  "config_ttl_hours": 24,
+  "name": "Z-Library EAPI 书源",
+  "sources": [
+    {
+      "schema_version": 1,
+      "id": "zlib",
+      "name": "Z-Library",
+      "description": "Z-Library EAPI 电子书搜索与下载书源（需配置个人账号或 remix Cookies，支持镜像自动切换与自定义反代）",
+      "driver": "rule",
+      "enabled": true,
+      "domains": [
+        "https://z-lib.gd",
+        "https://z-lib.gl",
+        "https://z-library.ec",
+        "https://zlib.bz"
+      ],
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "source": "android"
+      },
+      "image_headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      },
+      "max_mirror_attempts": 2,
+      "supported_formats": [
+        "epub",
+        "txt",
+        "pdf",
+        "mobi",
+        "azw3"
+      ],
+      "probe": {
+        "method": "GET",
+        "path": "/eapi/info/domains",
+        "expect_status": [
+          200
+        ],
+        "timeout_ms": 10000
+      },
+      "auth": {
+        "required": true,
+        "inject": {
+          "same_origin_only": true,
+          "headers": {
+            "remix-userid": "{{cred.remix_userid}}",
+            "remix_userid": "{{cred.remix_userid}}",
+            "remix-userkey": "{{cred.remix_userkey}}",
+            "remix_userkey": "{{cred.remix_userkey}}"
+          },
+          "cookies": {
+            "remix_userid": "{{cred.remix_userid}}",
+            "remix_userkey": "{{cred.remix_userkey}}"
+          }
+        },
+        "modes": [
+          {
+            "id": "password",
+            "label": "邮箱密码登录",
+            "fields": [
+              {
+                "key": "email",
+                "label": "邮箱",
+                "type": "email",
+                "required": true,
+                "hint": "Z-Library 注册邮箱"
+              },
+              {
+                "key": "password",
+                "label": "密码",
+                "type": "password",
+                "required": true,
+                "hint": "账号密码"
+              }
+            ],
+            "login": {
+              "method": "POST",
+              "path": "/eapi/user/login",
+              "content_type": "form",
+              "body": {
+                "email": "{{input.email}}",
+                "password": "{{input.password}}"
+              },
+              "response_mode": "json",
+              "save_credentials": {
+                "remix_userid": {
+                  "path": "user.id"
+                },
+                "remix_userkey": {
+                  "paths": [
+                    "user.remix_userkey",
+                    "user.remix_user_key"
+                  ]
+                },
+                "email": {
+                  "first_of": [
+                    {
+                      "path": "user.email"
+                    },
+                    {
+                      "template": "{{input.email}}"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "cookies",
+            "label": "Cookies 登录",
+            "fields": [
+              {
+                "key": "remix_userid",
+                "label": "remix_userid",
+                "type": "text",
+                "required": true,
+                "hint": "浏览器 Cookie 中的 remix_userid"
+              },
+              {
+                "key": "remix_userkey",
+                "label": "remix_userkey",
+                "type": "password",
+                "required": true,
+                "hint": "浏览器 Cookie 中的 remix_userkey"
+              }
+            ]
+          }
+        ],
+        "verify": {
+          "method": "GET",
+          "path": "/eapi/user/profile",
+          "response_mode": "json",
+          "fields": {
+            "email": {
+              "path": "user.email"
+            },
+            "daily_used": {
+              "paths": [
+                "user.downloads_today",
+                "user.dailyDownloadsCount"
+              ]
+            },
+            "daily_limit": {
+              "paths": [
+                "user.downloads_limit",
+                "user.dailyDownloadLimit"
+              ]
+            },
+            "premium": {
+              "path": "user.isPremium"
+            }
+          }
+        }
+      },
+      "errors": {
+        "bot_protection": {
+          "statuses": [
+            403,
+            503
+          ],
+          "html_body": true,
+          "has_location_header": true
+        },
+        "envelope": {
+          "success_path": "success",
+          "success_values": [
+            1,
+            true,
+            "1"
+          ],
+          "error_path": "error"
+        },
+        "rules": [
+          {
+            "code": "PROVIDER_NOT_CONFIGURED",
+            "error_regex": "^access denied$",
+            "require_unauthenticated": true
+          },
+          {
+            "code": "QUOTA_EXCEEDED",
+            "statuses": [
+              429
+            ],
+            "error_regex": "daily limit|limit reached|quota"
+          },
+          {
+            "code": "SESSION_EXPIRED",
+            "statuses": [
+              401,
+              403
+            ],
+            "error_regex": "invalid credentials|please login|not authorized|unauthorized|session expired"
+          },
+          {
+            "code": "NOT_FOUND",
+            "statuses": [
+              404
+            ],
+            "error_regex": "not found"
+          }
+        ]
+      },
+      "search": {
+        "request": {
+          "method": "POST",
+          "path": "/eapi/book/search",
+          "content_type": "form",
+          "page_size": 20,
+          "body": {
+            "message": "{{query.q}}",
+            "page": "{{query.page}}",
+            "limit": "{{query.limit}}"
+          }
+        },
+        "filters": {
+          "extensions": {
+            "param": "extensions[]",
+            "mode": "repeat",
+            "transform": "lower"
+          },
+          "languages": {
+            "param": "languages[]",
+            "mode": "repeat",
+            "transform": "lower"
+          },
+          "year_from": {
+            "param": "yearFrom",
+            "omit_if_zero": true
+          },
+          "year_to": {
+            "param": "yearTo",
+            "omit_if_zero": true
+          },
+          "order": {
+            "param": "order",
+            "options": [
+              {
+                "value": "",
+                "label": "默认"
+              },
+              {
+                "value": "popular",
+                "label": "最受欢迎"
+              },
+              {
+                "value": "bestmatch",
+                "label": "最相关"
+              },
+              {
+                "value": "date",
+                "label": "最近添加"
+              },
+              {
+                "value": "year",
+                "label": "出版年份"
+              }
+            ]
+          }
+        },
+        "response": {
+          "mode": "json",
+          "items_path": "books",
+          "pagination": {
+            "current_page_path": "pagination.current",
+            "total_pages_path": "pagination.total_pages"
+          },
+          "vars": {
+            "id": {
+              "path": "id"
+            },
+            "hash": {
+              "path": "hash"
+            }
+          },
+          "fields": {
+            "ref": {
+              "template": "{{vars.id}}:{{vars.hash}}"
+            },
+            "title": {
+              "path": "title"
+            },
+            "authors": {
+              "path": "author",
+              "split_regex": "\\s*(?:[,;|]|&|\\band\\b)\\s*"
+            },
+            "year": {
+              "path": "year"
+            },
+            "publisher": {
+              "path": "publisher"
+            },
+            "language": {
+              "path": "language"
+            },
+            "format": {
+              "path": "extension",
+              "strip_prefix": ".",
+              "transform": "lower"
+            },
+            "size": {
+              "paths": [
+                "filesizeString",
+                "filesize"
+              ]
+            },
+            "isbn": {
+              "paths": [
+                "identifier",
+                "isbn"
+              ]
+            },
+            "cover_url": {
+              "path": "cover",
+              "resolve_url": true
+            },
+            "description": {
+              "path": "description"
+            },
+            "source_url": {
+              "first_of": [
+                {
+                  "path": "href",
+                  "resolve_url": true
+                },
+                {
+                  "template": "{{origin}}/book/{{vars.id}}/{{vars.hash}}"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "detail": {
+        "method": "GET",
+        "path": "/eapi/book/{{book.ref_parts.0}}/{{book.ref_parts.1}}",
+        "response_mode": "json",
+        "root_path": "book",
+        "fields": {
+          "title": {
+            "path": "title"
+          },
+          "authors": {
+            "path": "author",
+            "split_regex": "\\s*(?:[,;|]|&|\\band\\b)\\s*"
+          },
+          "year": {
+            "path": "year"
+          },
+          "publisher": {
+            "path": "publisher"
+          },
+          "language": {
+            "path": "language"
+          },
+          "format": {
+            "path": "extension",
+            "strip_prefix": ".",
+            "transform": "lower"
+          },
+          "size": {
+            "paths": [
+              "filesizeString",
+              "filesize"
+            ]
+          },
+          "isbn": {
+            "paths": [
+              "identifier",
+              "isbn"
+            ]
+          },
+          "cover_url": {
+            "path": "cover",
+            "resolve_url": true
+          },
+          "description": {
+            "path": "description"
+          },
+          "source_url": {
+            "path": "href",
+            "resolve_url": true
+          }
+        }
+      },
+      "download": {
+        "ref_separator": ":",
+        "steps": [
+          {
+            "id": "file_link",
+            "method": "GET",
+            "path": "/eapi/book/{{book.ref_parts.0}}/{{book.ref_parts.1}}/file",
+            "response_mode": "json",
+            "extract": {
+              "url": {
+                "paths": [
+                  "file.downloadLink",
+                  "downloadLink",
+                  "url",
+                  "link"
+                ],
+                "resolve_url": true
+              }
+            },
+            "follow_while_url_regex": "^/eapi/book/.+/file(\\?.*)?$",
+            "max_hops": 3
+          }
+        ],
+        "file_request": {
+          "url": "{{step.file_link.url}}",
+          "same_origin_credentials": true,
+          "headers": {
+            "Referer": "{{origin}}/",
+            "Accept": "*/*",
+            "Accept-Encoding": "identity"
+          },
+          "retries": 3,
+          "stall_timeout_seconds": 120
+        }
+      }
+    }
+  ]
+}
