@@ -38,8 +38,11 @@
 | 书源 ID | 名称 | 支持能力 | 认证方式 | 说明 |
 | --- | --- | --- | --- | --- |
 | `zlib` | Z-Library | `search` `detail` `download` `login` `cookies` `quota` `probe` | 邮箱密码 / Cookie | 直连 EAPI 协议，支持多镜像域名健康缓存与自动故障切换 |
+| `gutendex` | 古登堡公版书库 | `search` `detail` `download` `probe` | 免登录 | 基于 Gutendex JSON API，7 万+多语种公版名著直连下载 EPUB/TXT |
+| `standard_ebooks` | Standard Ebooks | `search` `detail` `download` `probe` | 免登录 | 全人工精校英文公版名著，自动解析详页直链并流式下载 EPUB |
+| `wenshuoge` | 文硕阁 | `search` `detail` `download` `login` `cookies` `quota` `probe` | 搜书免登 / 下载需账密或 Cookie | 支持游标翻页、JSON-LD 详情、CSRF 登录、配额校验与异步 EPUB 轮询 |
 
-> 更多公开或需认证的书源可按 [扩展新书源](#扩展新书源) 章节快速接入。
+> 此外，`/static/public-book-sources.json` 与 `/static/zlibrary-book-source.json` 提供了可直接导入 Echo 客户端的 `book-sources.v1` 声明式书源配置；更多书源可按 [扩展新书源](#扩展新书源) 章节快速接入。
 
 ---
 

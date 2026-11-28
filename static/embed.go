@@ -4,5 +4,5 @@ package static
 
 import "embed"
 
-//go:embed index.html console.html home.css home.js styles.css app.js logo.svg zlibrary-book-source.json
+//go:embed index.html console.html home.css home.js styles.css app.js logo.svg zlibrary-book-source.json public-book-sources.json
 var FS embed.FS

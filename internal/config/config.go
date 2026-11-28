@@ -25,6 +25,9 @@ type Config struct {
 	MaxDownloadBytes      int64
 	CORSOrigins           []string
 	ZlibDomains           []string
+	GutendexDomain        string
+	StandardEbooksDomain  string
+	WenshuogeDomain       string
 	DefaultCreds          map[string]providers.Credentials
 }
 
@@ -72,6 +75,10 @@ func LoadFromEnv() *Config {
 		cfg.ZlibDomains = append(cfg.ZlibDomains, strings.TrimRight(d, "/"))
 	}
 
+	cfg.GutendexDomain = strings.TrimRight(env("GUTENDEX_DOMAIN", "https://gutendex.com"), "/")
+	cfg.StandardEbooksDomain = strings.TrimRight(env("STANDARD_EBOOKS_DOMAIN", "https://standardebooks.org"), "/")
+	cfg.WenshuogeDomain = strings.TrimRight(env("WENSHUOGE_DOMAIN", "https://www.wenshuoge.com"), "/")
+
 	// Generic provider default credentials: EBOOK_CRED_<PROVIDER>_<KEY>=<value>
 	for _, pair := range os.Environ() {
 		k, v, ok := strings.Cut(pair, "=")
@@ -86,10 +93,12 @@ func LoadFromEnv() *Config {
 		cfg.setDefaultCred(strings.ToLower(providerID), strings.ToLower(credKey), strings.TrimSpace(v))
 	}
 
-	// Convenient Z-Library aliases (do not overwrite explicit EBOOK_CRED_ZLIB_*).
+	// Convenient Z-Library and Wenshuoge aliases (do not overwrite explicit EBOOK_CRED_*).
 	cfg.setDefaultCredIfMissing("zlib", "domain", strings.TrimRight(strings.TrimSpace(os.Getenv("ZLIB_DOMAIN")), "/"))
 	cfg.setDefaultCredIfMissing("zlib", "remix_userid", strings.TrimSpace(os.Getenv("ZLIB_REMIX_USERID")))
 	cfg.setDefaultCredIfMissing("zlib", "remix_userkey", strings.TrimSpace(os.Getenv("ZLIB_REMIX_USERKEY")))
+	cfg.setDefaultCredIfMissing("wenshuoge", "domain", strings.TrimRight(strings.TrimSpace(os.Getenv("WENSHUOGE_DOMAIN")), "/"))
+	cfg.setDefaultCredIfMissing("wenshuoge", "wenshuoge_session", strings.TrimSpace(os.Getenv("WENSHUOGE_SESSION")))
 
 	return cfg
 }

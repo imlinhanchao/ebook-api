@@ -13,6 +13,9 @@ import (
 	"github.com/imlinhanchao/ebook-api/internal/api"
 	"github.com/imlinhanchao/ebook-api/internal/config"
 	"github.com/imlinhanchao/ebook-api/internal/providers"
+	"github.com/imlinhanchao/ebook-api/internal/providers/gutendex"
+	"github.com/imlinhanchao/ebook-api/internal/providers/standardebooks"
+	"github.com/imlinhanchao/ebook-api/internal/providers/wenshuoge"
 	"github.com/imlinhanchao/ebook-api/internal/providers/zlib"
 )
 
@@ -62,6 +65,15 @@ func registerProviders(cfg *config.Config) *providers.Registry {
 
 	if cfg.ProviderEnabled("zlib") {
 		reg.Register(zlib.New(cfg.ZlibDomains, cfg.MaxDownloadBytes))
+	}
+	if cfg.ProviderEnabled("gutendex") {
+		reg.Register(gutendex.New(cfg.GutendexDomain, cfg.MaxDownloadBytes))
+	}
+	if cfg.ProviderEnabled("standard_ebooks") {
+		reg.Register(standardebooks.New(cfg.StandardEbooksDomain, cfg.MaxDownloadBytes))
+	}
+	if cfg.ProviderEnabled("wenshuoge") {
+		reg.Register(wenshuoge.New(cfg.WenshuogeDomain, cfg.MaxDownloadBytes))
 	}
 
 	return reg

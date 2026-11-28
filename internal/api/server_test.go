@@ -445,6 +445,7 @@ func TestStaticEmbeddedFallback(t *testing.T) {
 		{"/static/home.js", "buildEnvConfig"},
 		{"/static/app.js", "STORAGE_KEY"},
 		{"/static/zlibrary-book-source.json", `"id": "zlib"`},
+		{"/static/public-book-sources.json", `"id": "gutendex"`},
 	} {
 		req = httptest.NewRequest(http.MethodGet, asset.path, nil)
 		rec = httptest.NewRecorder()
